@@ -1,0 +1,9 @@
+services:
+  mermaid-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mermaid-studio-pro
+    ports:
+      - "5173:80"
+    restart: unless-stopped
