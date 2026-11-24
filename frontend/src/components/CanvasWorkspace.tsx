@@ -185,7 +185,7 @@ const NOTE_COLORS: Record<StickyNote['color'], string> = {
   violet: 'bg-violet-100 border-violet-300 text-violet-950',
 };
 
-export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
+export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = React.memo(({
   svg,
   bindFunctions,
   code,
@@ -2194,4 +2194,4 @@ export const CanvasWorkspace: React.FC<CanvasWorkspaceProps> = ({
       </div>
     </div>
   );
-};
+});

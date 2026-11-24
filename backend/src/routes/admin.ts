@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import {
+  invalidateAuthCache,
   requireAuth,
   requireSuperAdmin,
   type AuthenticatedRequest,
@@ -275,6 +276,7 @@ adminRouter.patch('/users/:id', async (req: AuthenticatedRequest, res) => {
     );
 
     const u = updated.rows[0];
+    invalidateAuthCache(targetId);
     res.json({
       user: {
         id: u.id,
@@ -306,6 +308,7 @@ adminRouter.delete('/users/:id', async (req: AuthenticatedRequest, res) => {
       res.status(404).json({ error: 'Akun user tidak ditemukan.' });
       return;
     }
+    invalidateAuthCache(targetId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Admin Delete User Error]', err);

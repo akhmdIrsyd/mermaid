@@ -61,17 +61,34 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
     total: 0,
     totalPages: 1,
   });
-  const [loading, setLoading] = useState(false);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingDiagrams, setLoadingDiagrams] = useState(false);
   const [cloningKey, setCloningKey] = useState<string | null>(null);
 
   const [userSearch, setUserSearch] = useState('');
+  const [debouncedUserSearch, setDebouncedUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'super_admin' | 'user'>('all');
   const [usersPage, setUsersPage] = useState(1);
   const [usersLimit, setUsersLimit] = useState(10);
 
   const [diagramSearch, setDiagramSearch] = useState('');
+  const [debouncedDiagramSearch, setDebouncedDiagramSearch] = useState('');
   const [diagramsPage, setDiagramsPage] = useState(1);
   const [diagramsLimit, setDiagramsLimit] = useState(10);
+
+  const loading = loadingStats || loadingUsers || loadingDiagrams;
+
+  // Debounce ONLY text search inputs (instant 0ms response for opening modal & page buttons!)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedUserSearch(userSearch), 240);
+    return () => clearTimeout(t);
+  }, [userSearch]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedDiagramSearch(diagramSearch), 240);
+    return () => clearTimeout(t);
+  }, [diagramSearch]);
 
   // Create user form
   const [creating, setCreating] = useState(false);
@@ -93,43 +110,79 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
     setTimeout(() => setNotice(null), 3500);
   };
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadStats = useCallback(async () => {
+    setLoadingStats(true);
+    try {
+      const statsRes = await adminApi.getStats();
+      setStats(statsRes.stats);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal memuat statistik.');
+    } finally {
+      setLoadingStats(false);
+    }
+  }, []);
+
+  const loadUsers = useCallback(async () => {
+    setLoadingUsers(true);
     setError(null);
     try {
-      const [statsRes, usersRes, diagramsRes] = await Promise.all([
-        adminApi.getStats(),
-        adminApi.listUsers({
-          search: userSearch,
-          role: roleFilter,
-          page: usersPage,
-          limit: usersLimit,
-        }),
-        adminApi.listDiagrams({
-          search: diagramSearch,
-          page: diagramsPage,
-          limit: diagramsLimit,
-        }),
-      ]);
-      setStats(statsRes.stats);
+      const usersRes = await adminApi.listUsers({
+        search: debouncedUserSearch,
+        role: roleFilter,
+        page: usersPage,
+        limit: usersLimit,
+      });
       setUsers(usersRes.users);
       setUsersPagination(usersRes.pagination);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal memuat daftar user.');
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [debouncedUserSearch, roleFilter, usersPage, usersLimit]);
+
+  const loadDiagrams = useCallback(async () => {
+    setLoadingDiagrams(true);
+    setError(null);
+    try {
+      const diagramsRes = await adminApi.listDiagrams({
+        search: debouncedDiagramSearch,
+        page: diagramsPage,
+        limit: diagramsLimit,
+      });
       setDiagrams(diagramsRes.diagrams);
       setDiagramsPagination(diagramsRes.pagination);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat data Super Admin.');
+      setError(err instanceof Error ? err.message : 'Gagal memuat daftar diagram.');
     } finally {
-      setLoading(false);
+      setLoadingDiagrams(false);
     }
-  }, [userSearch, roleFilter, usersPage, usersLimit, diagramSearch, diagramsPage, diagramsLimit]);
+  }, [debouncedDiagramSearch, diagramsPage, diagramsLimit]);
 
+  const loadData = useCallback(async () => {
+    const tasks: Promise<void>[] = [loadStats()];
+    if (tab === 'users' || tab === 'api') tasks.push(loadUsers());
+    if (tab === 'diagrams' || tab === 'api') tasks.push(loadDiagrams());
+    await Promise.all(tasks);
+  }, [tab, loadStats, loadUsers, loadDiagrams]);
+
+  // Load stats immediately when opened
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => {
-      void loadData();
-    }, 200);
-    return () => clearTimeout(t);
-  }, [open, loadData]);
+    void loadStats();
+  }, [open, loadStats]);
+
+  // Load users immediately when Users or API tab is active
+  useEffect(() => {
+    if (!open || (tab !== 'users' && tab !== 'api')) return;
+    void loadUsers();
+  }, [open, tab, loadUsers]);
+
+  // Lazy-load diagrams ONLY when Diagrams or API tab is opened!
+  useEffect(() => {
+    if (!open || (tab !== 'diagrams' && tab !== 'api')) return;
+    void loadDiagrams();
+  }, [open, tab, loadDiagrams]);
 
   const handleCloneDiagram = async (d: AdminDiagramRecord) => {
     const key = `${d.userId}-${d.id}`;
@@ -232,10 +285,11 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div onClick={onClose} className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs" />
+      <div onClick={onClose} className="fixed inset-0 bg-slate-950/60" />
 
       <div
-        className={`relative z-10 w-full max-w-5xl max-h-[88vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden animate-pop ${
+        style={{ contain: 'layout paint' }}
+        className={`relative z-10 w-full max-w-5xl max-h-[88vh] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
           darkMode
             ? 'bg-[#121520] border-slate-700 text-slate-100'
             : 'bg-white border-slate-200 text-slate-800'
@@ -376,7 +430,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              Manajemen User ({usersPagination.total})
+              Manajemen User ({stats?.totalUsers ?? usersPagination.total})
             </button>
             <button
               type="button"
@@ -388,7 +442,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
               }`}
             >
               <FileCode2 className="w-3.5 h-3.5" />
-              Semua Diagram ({diagramsPagination.total})
+              Semua Diagram ({stats?.totalDiagrams ?? diagramsPagination.total})
             </button>
             <button
               type="button"

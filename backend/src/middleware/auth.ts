@@ -21,6 +21,17 @@ export function signToken(payload: AuthJwtPayload): string {
   });
 }
 
+// Short-TTL in-memory cache for live role/isActive checks (invalidated immediately on admin mutations)
+const userStatusCache = new Map<
+  string,
+  { email: string; role: UserRole; isActive: boolean; expiresAt: number }
+>();
+const CACHE_TTL_MS = 10_000;
+
+export function invalidateAuthCache(userId: string): void {
+  userStatusCache.delete(userId);
+}
+
 export async function requireAuth(
   req: AuthenticatedRequest,
   res: Response,
@@ -40,6 +51,22 @@ export async function requireAuth(
       return;
     }
 
+    const now = Date.now();
+    const cached = userStatusCache.get(decoded.userId);
+    if (cached && cached.expiresAt > now) {
+      if (!cached.isActive) {
+        res.status(403).json({ error: 'Akun Anda sedang dinonaktifkan oleh Super Admin.' });
+        return;
+      }
+      req.user = {
+        userId: decoded.userId,
+        email: cached.email,
+        role: cached.role,
+      };
+      next();
+      return;
+    }
+
     // Verify live account status & role in DB so suspensions / role changes apply immediately
     const userRes = await pool.query<{ id: string; email: string; role: string; is_active: boolean }>(
       'SELECT id, email, role, is_active FROM users WHERE id = $1',
@@ -51,6 +78,14 @@ export async function requireAuth(
     }
 
     const dbUser = userRes.rows[0];
+    const role: UserRole = dbUser.role === 'super_admin' ? 'super_admin' : 'user';
+    userStatusCache.set(dbUser.id, {
+      email: dbUser.email,
+      role,
+      isActive: Boolean(dbUser.is_active),
+      expiresAt: now + CACHE_TTL_MS,
+    });
+
     if (!dbUser.is_active) {
       res.status(403).json({ error: 'Akun Anda sedang dinonaktifkan oleh Super Admin.' });
       return;
@@ -59,7 +94,7 @@ export async function requireAuth(
     req.user = {
       userId: dbUser.id,
       email: dbUser.email,
-      role: dbUser.role === 'super_admin' ? 'super_admin' : 'user',
+      role,
     };
     next();
   } catch {

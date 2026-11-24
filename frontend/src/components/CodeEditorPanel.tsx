@@ -127,7 +127,7 @@ interface CodeEditorPanelProps {
   onResizeWidth: (w: number) => void;
 }
 
-export const CodeEditorPanel: React.FC<CodeEditorPanelProps> = ({
+export const CodeEditorPanel: React.FC<CodeEditorPanelProps> = React.memo(({
   code,
   onChange,
   autoUpdate,
@@ -663,4 +663,4 @@ export const CodeEditorPanel: React.FC<CodeEditorPanelProps> = ({
       />
     </aside>
   );
-};
+});

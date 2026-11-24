@@ -427,7 +427,7 @@ const AuthenticatedWorkspace: React.FC<AuthenticatedWorkspaceProps> = ({
         onLogout={onLogout}
       />
 
-      {user.role === 'super_admin' && (
+      {user.role === 'super_admin' && superAdminOpen && (
         <SuperAdminModal
           open={superAdminOpen}
           onClose={() => setSuperAdminOpen(false)}
