@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, MessageSquare, CheckCircle2, Circle, Trash2, MapPin, Send } from 'lucide-react';
 import type { DiagramComment } from '../types';
+import { PaginationBar } from './PaginationBar';
 
 interface CommentsPanelProps {
   open: boolean;
@@ -24,6 +25,8 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
   onDeleteComment,
 }) => {
   const [filter, setFilter] = useState<'open' | 'resolved' | 'all'>('open');
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
   const [draft, setDraft] = useState('');
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
 
@@ -34,6 +37,10 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
     if (filter === 'resolved') return c.resolved;
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedComments = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +90,10 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
           <button
             key={f}
             type="button"
-            onClick={() => setFilter(f)}
+            onClick={() => {
+              setFilter(f);
+              setPage(1);
+            }}
             className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold capitalize cursor-pointer ${
               filter === f
                 ? 'bg-[#e0095f]/12 text-[#e0095f]'
@@ -97,15 +107,16 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
         ))}
       </div>
 
-      {/* Comments Thread List */}
+      {/* Comments Thread List (Paginated) */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-        {filtered.length === 0 ? (
+        {pagedComments.length === 0 ? (
           <div className="text-center py-12 text-xs opacity-60">
             No {filter === 'all' ? '' : filter} comments yet. Add one below or pin directly on the
             canvas!
           </div>
         ) : (
-          filtered.map((c) => (
+          <>
+            {pagedComments.map((c) => (
             <div
               key={c.id}
               className={`p-3 rounded-xl border space-y-2 ${
@@ -211,7 +222,19 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
                 </button>
               </div>
             </div>
-          ))
+            ))}
+            <div className="pt-1">
+              <PaginationBar
+                page={safePage}
+                totalPages={totalPages}
+                totalItems={filtered.length}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                darkMode={darkMode}
+                compact
+              />
+            </div>
+          </>
         )}
       </div>
 

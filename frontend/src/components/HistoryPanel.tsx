@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, History, RotateCcw, BookmarkPlus, Trash2, GitCompare } from 'lucide-react';
 import type { VersionSnapshot } from '../types';
+import { PaginationBar } from './PaginationBar';
 
 interface HistoryPanelProps {
   open: boolean;
@@ -49,6 +50,15 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
 }) => {
   const [label, setLabel] = useState('');
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+
+  const totalPages = Math.max(1, Math.ceil(versions.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedVersions = useMemo(
+    () => versions.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [versions, safePage]
+  );
 
   const previewVersion = useMemo(
     () => versions.find((v) => v.id === previewId) || null,
@@ -175,7 +185,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
         </div>
       )}
 
-      {/* Versions Timeline */}
+      {/* Versions Timeline (Paginated) */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {versions.length === 0 ? (
           <div className="text-center py-12 text-xs opacity-60">
@@ -183,7 +193,8 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
             checkpoint above.
           </div>
         ) : (
-          versions.map((ver) => (
+          <>
+            {pagedVersions.map((ver) => (
             <div
               key={ver.id}
               className={`p-3 rounded-xl border transition-colors ${
@@ -242,7 +253,19 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                 </button>
               </div>
             </div>
-          ))
+            ))}
+            <div className="pt-1">
+              <PaginationBar
+                page={safePage}
+                totalPages={totalPages}
+                totalItems={versions.length}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                darkMode={darkMode}
+                compact
+              />
+            </div>
+          </>
         )}
       </div>
     </aside>

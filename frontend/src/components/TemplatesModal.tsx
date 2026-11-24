@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { X, LayoutTemplate, Search, Plus, ArrowRight } from 'lucide-react';
 import { DIAGRAM_TEMPLATES } from '../data/templates';
 import type { DiagramTemplate } from '../types';
+import { PaginationBar } from './PaginationBar';
 
 interface TemplatesModalProps {
   open: boolean;
@@ -20,6 +21,8 @@ export const TemplatesModal: React.FC<TemplatesModalProps> = ({
 }) => {
   const [category, setCategory] = useState<string>('All');
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 9;
 
   const categories = useMemo(
     () => ['All', ...Array.from(new Set(DIAGRAM_TEMPLATES.map((t) => t.category)))],
@@ -37,6 +40,13 @@ export const TemplatesModal: React.FC<TemplatesModalProps> = ({
         : true
     );
   }, [category, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedTemplates = useMemo(
+    () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filtered, safePage]
+  );
 
   if (!open) return null;
 
@@ -81,7 +91,10 @@ export const TemplatesModal: React.FC<TemplatesModalProps> = ({
               <input
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Search templates..."
                 className="bg-transparent text-xs outline-none w-40"
               />
@@ -108,7 +121,10 @@ export const TemplatesModal: React.FC<TemplatesModalProps> = ({
             <button
               key={cat}
               type="button"
-              onClick={() => setCategory(cat)}
+              onClick={() => {
+                setCategory(cat);
+                setPage(1);
+              }}
               className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                 category === cat
                   ? 'bg-[#e0095f] text-white shadow-sm'
@@ -122,9 +138,10 @@ export const TemplatesModal: React.FC<TemplatesModalProps> = ({
           ))}
         </div>
 
-        {/* Template Cards Grid */}
-        <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {filtered.map((tpl) => (
+        {/* Template Cards Grid (Paginated) */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {pagedTemplates.map((tpl) => (
             <div
               key={tpl.id}
               className={`flex flex-col justify-between p-4 rounded-2xl border transition-all ${
@@ -179,6 +196,16 @@ export const TemplatesModal: React.FC<TemplatesModalProps> = ({
               </div>
             </div>
           ))}
+          </div>
+          <PaginationBar
+            page={safePage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            darkMode={darkMode}
+            itemLabel="template"
+          />
         </div>
       </div>
     </div>

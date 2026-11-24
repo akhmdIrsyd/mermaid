@@ -15,15 +15,22 @@ import {
   Trash2,
   FolderOpen,
   FileCode2,
-  Crown,
   Check,
   Lock,
   Unlock,
+  Cloud,
+  CloudUpload,
+  CloudOff,
+  LogOut,
+  UserCog,
+  ShieldCheck,
 } from 'lucide-react';
-import type { DiagramDocument, DiagramFolder } from '../types';
+import type { AuthUser, DiagramDocument, DiagramFolder, SyncStatus } from '../types';
 import { detectDiagramType } from '../utils/frontmatter';
 
 interface TopBarProps {
+  user: AuthUser;
+  syncStatus: SyncStatus;
   diagram: DiagramDocument;
   folder: DiagramFolder;
   darkMode: boolean;
@@ -38,12 +45,17 @@ interface TopBarProps {
   onOpenExport: () => void;
   onOpenShare: () => void;
   onOpenPresentation: () => void;
+  onOpenAccount: () => void;
+  onOpenSuperAdmin: () => void;
+  onLogout: () => void;
   activeDrawer: 'none' | 'comments' | 'notes' | 'history';
   onToggleDrawer: (drawer: 'comments' | 'notes' | 'history') => void;
   unresolvedCommentsCount: number;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
+  user,
+  syncStatus,
   diagram,
   folder,
   darkMode,
@@ -58,6 +70,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenExport,
   onOpenShare,
   onOpenPresentation,
+  onOpenAccount,
+  onOpenSuperAdmin,
+  onLogout,
   activeDrawer,
   onToggleDrawer,
   unresolvedCommentsCount,
@@ -65,7 +80,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [editingTitle, setEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(diagram.title);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setDraftTitle(diagram.title);
@@ -75,6 +92,9 @@ export const TopBar: React.FC<TopBarProps> = ({
     const onDocClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
+      }
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
+        setAccountMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', onDocClick);
@@ -422,6 +442,39 @@ export const TopBar: React.FC<TopBarProps> = ({
           <Download className="w-4.5 h-4.5" />
         </button>
 
+        {/* Live PostgreSQL Sync Indicator */}
+        <div
+          className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-semibold ${
+            syncStatus === 'error'
+              ? 'bg-rose-500/12 text-rose-500'
+              : syncStatus === 'saving' || syncStatus === 'loading'
+              ? darkMode
+                ? 'bg-slate-800 text-sky-400'
+                : 'bg-sky-50 text-sky-600'
+              : darkMode
+              ? 'bg-slate-800/70 text-emerald-400'
+              : 'bg-emerald-50 text-emerald-600'
+          }`}
+          title="Status sinkronisasi ke database PostgreSQL"
+        >
+          {syncStatus === 'error' ? (
+            <>
+              <CloudOff className="w-3.5 h-3.5" />
+              <span>Sync Error</span>
+            </>
+          ) : syncStatus === 'saving' || syncStatus === 'loading' ? (
+            <>
+              <CloudUpload className="w-3.5 h-3.5 animate-pulse" />
+              <span>Saving...</span>
+            </>
+          ) : (
+            <>
+              <Cloud className="w-3.5 h-3.5" />
+              <span>Saved</span>
+            </>
+          )}
+        </div>
+
         {/* Share Pill Button (Mermaid.ai Dark Charcoal Button) */}
         <button
           type="button"
@@ -432,13 +485,97 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span>Share</span>
         </button>
 
-        {/* Pro Unlocked Badge (replaces Upgrade paywall!) */}
-        <div
-          className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#e0095f] to-[#b8054c] text-white text-xs font-bold shadow-sm shadow-[#e0095f]/25"
-          title="All Pro features unlocked: Unlimited diagrams, ELK layout, 8x PNG/PDF export, Version diffs, Theme studio, Presentation mode"
-        >
-          <Crown className="w-3.5 h-3.5" />
-          <span>Pro Unlocked</span>
+        {/* Super Admin Quick Console Button (only for super_admin role) */}
+        {user.role === 'super_admin' && (
+          <button
+            type="button"
+            onClick={onOpenSuperAdmin}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:brightness-105 text-white text-xs font-bold shadow-sm shadow-amber-500/25 cursor-pointer transition"
+            title="Buka Super Admin Console"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Super Admin</span>
+          </button>
+        )}
+
+        {/* User Account Pill & Dropdown */}
+        <div className="relative" ref={accountMenuRef}>
+          <button
+            type="button"
+            onClick={() => setAccountMenuOpen((v) => !v)}
+            className="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-xl bg-gradient-to-r from-[#e0095f] to-[#b8054c] hover:brightness-105 text-white text-xs font-bold shadow-sm shadow-[#e0095f]/25 cursor-pointer transition"
+            title={`Akun: ${user.name} (${user.email})`}
+          >
+            <span className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-[11px] font-extrabold">
+              {user.name.slice(0, 2).toUpperCase()}
+            </span>
+            <span className="hidden lg:inline max-w-[110px] truncate">{user.name}</span>
+          </button>
+
+          {accountMenuOpen && (
+            <div
+              className={`absolute right-0 top-full mt-2 w-56 rounded-2xl border shadow-2xl py-2 z-50 animate-pop ${
+                darkMode
+                  ? 'bg-[#1a1e2e] border-slate-700 text-slate-200'
+                  : 'bg-white border-slate-200 text-slate-700'
+              }`}
+            >
+              <div
+                className={`px-3.5 py-2 border-b ${
+                  darkMode ? 'border-slate-800' : 'border-slate-100'
+                }`}
+              >
+                <div className="text-xs font-bold truncate flex items-center gap-1.5">
+                  <span className="truncate">{user.name}</span>
+                  {user.role === 'super_admin' && (
+                    <span className="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-extrabold shrink-0">
+                      ADMIN
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] opacity-65 truncate">{user.email}</div>
+              </div>
+              {user.role === 'super_admin' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    onOpenSuperAdmin();
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 cursor-pointer ${
+                    darkMode ? 'hover:bg-slate-800' : 'hover:bg-amber-50/70'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Super Admin Console
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  onOpenAccount();
+                }}
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium cursor-pointer ${
+                  darkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
+                }`}
+              >
+                <UserCog className="w-3.5 h-3.5 text-slate-400" />
+                Pengaturan Akun
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  onLogout();
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

@@ -1,9 +1,53 @@
 services:
-  mermaid-studio:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: mermaid-studio-pro
+  db:
+    image: postgres:16-alpine
+    container_name: mermaid-studio-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mermaid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mermaid_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-mermaid_studio}
     ports:
-      - "5173:80"
+      - "${POSTGRES_PORT:-5439}:5432"
+    volumes:
+      - mermaid_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mermaid} -d ${POSTGRES_DB:-mermaid_studio}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
     restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mermaid-studio-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mermaid}:${POSTGRES_PASSWORD:-mermaid_secret}@db:5432/${POSTGRES_DB:-mermaid_studio}
+      JWT_SECRET: ${JWT_SECRET:-change-this-super-secret-jwt-key-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-admin@mermaid.local}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-Admin123456!}
+      SUPER_ADMIN_NAME: ${SUPER_ADMIN_NAME:-Super Admin}
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mermaid-studio-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    restart: unless-stopped
+
+volumes:
+  mermaid_pgdata:

@@ -190,3 +190,60 @@ export interface SelectedNodeInfo {
 export type CanvasGridStyle = 'cross' | 'dots' | 'none';
 export type EditorMode = 'code' | 'visual';
 export type CanvasTool = 'pan' | 'select' | 'comment';
+
+export type UserRole = 'user' | 'super_admin';
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  isActive?: boolean;
+  darkMode?: boolean;
+  createdAt?: string;
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  activeUsers: number;
+  suspendedUsers: number;
+  superAdmins: number;
+  totalDiagrams: number;
+  totalFolders: number;
+}
+
+export interface AdminUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  diagramCount: number;
+  folderCount: number;
+}
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface AdminDiagramRecord {
+  id: string;
+  userId: string;
+  ownerName: string;
+  ownerEmail: string;
+  folderId: string;
+  title: string;
+  codeLength?: number;
+  code?: string;
+  favorite: boolean;
+  locked: boolean;
+  updatedAt: number;
+  createdAt: number;
+}
+
+export type SyncStatus = 'idle' | 'loading' | 'saving' | 'saved' | 'error';

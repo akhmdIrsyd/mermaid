@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { authApi, getAuthToken, setAuthToken } from './api/client';
+import type { AuthUser } from './types';
 import { useWorkspace } from './store/useWorkspace';
 import { renderMermaidDiagram } from './utils/mermaidEngine';
 import { executeExport } from './utils/export';
 import { decodeShareHash } from './utils/share';
+import { AuthPage } from './components/AuthPage';
+import { AccountModal } from './components/AccountModal';
+import { SuperAdminModal } from './components/SuperAdminModal';
 import { TopBar } from './components/TopBar';
 import { CodeEditorPanel } from './components/CodeEditorPanel';
 import { CanvasWorkspace } from './components/CanvasWorkspace';
@@ -17,7 +22,79 @@ import { TemplatesModal } from './components/TemplatesModal';
 import { PresentationOverlay } from './components/PresentationOverlay';
 
 export function App() {
-  const ws = useWorkspace();
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
+
+  const handleLogout = useCallback(() => {
+    setAuthToken(null);
+    setUser(null);
+  }, []);
+
+  // Restore session from JWT token on initial load
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      setAuthChecking(false);
+      return;
+    }
+
+    let cancelled = false;
+    authApi
+      .me()
+      .then((res) => {
+        if (!cancelled) setUser(res.user);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuthToken(null);
+          setUser(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAuthChecking(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (authChecking) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center canvas-grid-light text-slate-700">
+        <div className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-white border border-slate-200 shadow-lg">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f41b72] to-[#c90652] animate-pulse" />
+          <div className="text-xs font-bold tracking-wide">Memuat sesi Mermaid Studio...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage onAuthenticated={setUser} />;
+  }
+
+  return (
+    <AuthenticatedWorkspace
+      user={user}
+      onUserUpdated={setUser}
+      onLogout={handleLogout}
+    />
+  );
+}
+
+interface AuthenticatedWorkspaceProps {
+  user: AuthUser;
+  onUserUpdated: (user: AuthUser) => void;
+  onLogout: () => void;
+}
+
+const AuthenticatedWorkspace: React.FC<AuthenticatedWorkspaceProps> = ({
+  user,
+  onUserUpdated,
+  onLogout,
+}) => {
+  const ws = useWorkspace(user, onLogout);
   const { activeDiagram, activeFolder, darkMode } = ws;
 
   const [codeOpen, setCodeOpen] = useState(true);
@@ -35,6 +112,8 @@ export function App() {
   const [shareOpen, setShareOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [superAdminOpen, setSuperAdminOpen] = useState(false);
   const [presentationOpen, setPresentationOpen] = useState(() => {
     const shared = decodeShareHash(window.location.hash);
     return Boolean(shared?.presentation);
@@ -65,20 +144,20 @@ export function App() {
 
   // Debounced auto-render when autoUpdate is enabled
   useEffect(() => {
-    if (!autoUpdate) return;
+    if (!autoUpdate || ws.loading) return;
     const timer = setTimeout(() => {
       runRender(activeDiagram.code);
     }, 180);
     return () => clearTimeout(timer);
-  }, [activeDiagram.code, activeDiagram.id, autoUpdate, runRender]);
+  }, [activeDiagram.code, activeDiagram.id, autoUpdate, ws.loading, runRender]);
 
-  // Always render immediately when switching diagrams even if autoUpdate is off
+  // Always render immediately when switching diagrams or right after DB finishes loading
   useEffect(() => {
+    if (ws.loading) return;
     runRender(activeDiagram.code);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDiagram.id]);
+  }, [activeDiagram.id, ws.loading]);
 
-  // Sync dark class on root element for Tailwind dark utilities
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
@@ -92,6 +171,19 @@ export function App() {
     setActiveDrawer((prev) => (prev === drawer ? 'none' : drawer));
   }, []);
 
+  if (ws.loading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center canvas-grid-light text-slate-700">
+        <div className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-white border border-slate-200 shadow-lg">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f41b72] to-[#c90652] animate-pulse" />
+          <div className="text-xs font-bold tracking-wide">
+            Mengambil workspace dari database PostgreSQL...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const unresolvedCommentsCount = activeDiagram.comments.filter((c) => !c.resolved).length;
 
   return (
@@ -102,20 +194,24 @@ export function App() {
     >
       {/* Top Navigation Bar */}
       <TopBar
+        user={user}
+        syncStatus={ws.syncStatus}
         diagram={activeDiagram}
         folder={activeFolder}
         darkMode={darkMode}
         onToggleDarkMode={ws.toggleDarkMode}
         onOpenSidebar={() => setSidebarOpen(true)}
-        onRename={(title) => ws.updateActiveDiagram((d) => ({ ...d, title }))}
+        onRename={(title) => ws.updateActiveDiagram((d) => ({ ...d, title }), true)}
         onToggleFavorite={() =>
-          ws.updateActiveDiagram((d) => ({ ...d, favorite: !d.favorite }))
+          ws.updateActiveDiagram((d) => ({ ...d, favorite: !d.favorite }), true)
         }
-        onToggleLocked={() => ws.updateActiveDiagram((d) => ({ ...d, locked: !d.locked }))}
+        onToggleLocked={() =>
+          ws.updateActiveDiagram((d) => ({ ...d, locked: !d.locked }), true)
+        }
         onDuplicate={() => ws.duplicateDiagram(activeDiagram.id)}
         onDelete={() => ws.deleteDiagram(activeDiagram.id)}
         onExportMmd={() =>
-          executeExport(renderedSvg, activeDiagram.code, {
+          executeExport(liveExportSvg || renderedSvg, activeDiagram.code, {
             format: 'mmd',
             scale: 2,
             background: 'white',
@@ -127,14 +223,16 @@ export function App() {
         onOpenExport={() => setExportOpen(true)}
         onOpenShare={() => setShareOpen(true)}
         onOpenPresentation={() => setPresentationOpen(true)}
+        onOpenAccount={() => setAccountOpen(true)}
+        onOpenSuperAdmin={() => setSuperAdminOpen(true)}
+        onLogout={onLogout}
         activeDrawer={activeDrawer}
         onToggleDrawer={handleToggleDrawer}
         unresolvedCommentsCount={unresolvedCommentsCount}
       />
 
-      {/* Main Split Workspace: Floating Left Code Card + Infinite Canvas + Optional Right Drawer */}
+      {/* Main Split Workspace */}
       <div className="relative flex-1 min-h-0 flex overflow-hidden">
-        {/* Floating Left Code Panel (matching Mermaid.ai inset floating card aesthetic) */}
         {codeOpen && (
           <div className="p-3 pr-0 h-full z-20 shrink-0 hidden sm:block">
             <CodeEditorPanel
@@ -156,7 +254,6 @@ export function App() {
           </div>
         )}
 
-        {/* Mobile Code Editor Drawer */}
         {codeOpen && (
           <div className="sm:hidden fixed inset-x-3 top-16 bottom-3 z-30">
             <CodeEditorPanel
@@ -186,7 +283,9 @@ export function App() {
           onChangeCode={ws.setActiveCode}
           onForceRender={runRender}
           locked={activeDiagram.locked}
-          onToggleLocked={() => ws.updateActiveDiagram((d) => ({ ...d, locked: !d.locked }))}
+          onToggleLocked={() =>
+            ws.updateActiveDiagram((d) => ({ ...d, locked: !d.locked }), true)
+          }
           darkMode={darkMode}
           codeOpen={codeOpen}
           onOpenCode={() => setCodeOpen(true)}
@@ -206,7 +305,7 @@ export function App() {
           onUpdateStickyNote={ws.updateStickyNote}
           onDeleteStickyNote={ws.deleteStickyNote}
           pinnedComments={activeDiagram.comments}
-          onAddPinnedComment={(text, pos) => ws.addComment(text, 'You', pos)}
+          onAddPinnedComment={(text, pos) => ws.addComment(text, user.name, pos)}
           onSelectCommentDrawer={() => setActiveDrawer('comments')}
         />
 
@@ -228,8 +327,8 @@ export function App() {
           onClose={() => setActiveDrawer('none')}
           darkMode={darkMode}
           comments={activeDiagram.comments}
-          onAddComment={(text) => ws.addComment(text)}
-          onReplyComment={ws.replyComment}
+          onAddComment={(text) => ws.addComment(text, user.name)}
+          onReplyComment={(cid, text) => ws.replyComment(cid, text, user.name)}
           onToggleResolve={ws.toggleResolveComment}
           onDeleteComment={ws.deleteComment}
         />
@@ -298,11 +397,14 @@ export function App() {
         darkMode={darkMode}
         onApplyToCurrent={(tpl) => {
           if (!activeDiagram.locked) {
-            ws.updateActiveDiagram((d) => ({
-              ...d,
-              title: tpl.title,
-              code: tpl.code,
-            }));
+            ws.updateActiveDiagram(
+              (d) => ({
+                ...d,
+                title: tpl.title,
+                code: tpl.code,
+              }),
+              true
+            );
           }
         }}
         onCreateNewFromTemplate={(tpl) => {
@@ -314,6 +416,27 @@ export function App() {
         }}
       />
 
+      <AccountModal
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        darkMode={darkMode}
+        user={user}
+        diagramsCount={ws.diagrams.length}
+        foldersCount={ws.folders.length}
+        onUserUpdated={onUserUpdated}
+        onLogout={onLogout}
+      />
+
+      {user.role === 'super_admin' && (
+        <SuperAdminModal
+          open={superAdminOpen}
+          onClose={() => setSuperAdminOpen(false)}
+          darkMode={darkMode}
+          currentUser={user}
+          onCloneDiagramToMyWorkspace={(title, code) => ws.createDiagram({ title, code })}
+        />
+      )}
+
       <PresentationOverlay
         open={presentationOpen}
         onClose={() => setPresentationOpen(false)}
@@ -323,6 +446,6 @@ export function App() {
       />
     </div>
   );
-}
+};
 
 export default App;

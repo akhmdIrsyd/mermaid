@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { DiagramDocument, DiagramFolder } from '../types';
 import { detectDiagramType } from '../utils/frontmatter';
+import { PaginationBar } from './PaginationBar';
 
 interface FileSidebarProps {
   open: boolean;
@@ -58,6 +59,8 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -78,6 +81,13 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
       )
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }, [diagrams, selectedFolder, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredDiagrams.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedDiagrams = useMemo(
+    () => filteredDiagrams.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredDiagrams, safePage]
+  );
 
   if (!open) return null;
 
@@ -193,7 +203,10 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search diagrams or code..."
               className="w-full bg-transparent text-xs outline-none"
             />
@@ -313,14 +326,15 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
           </div>
         </div>
 
-        {/* Diagrams List */}
+        {/* Diagrams List (Paginated for zero lag) */}
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
-          {filteredDiagrams.length === 0 ? (
+          {pagedDiagrams.length === 0 ? (
             <div className="py-10 text-center text-xs opacity-60">
               No matching diagrams found.
             </div>
           ) : (
-            filteredDiagrams.map((doc) => {
+            <>
+              {pagedDiagrams.map((doc) => {
               const isActive = doc.id === activeDiagramId;
               const typeLabel = detectDiagramType(doc.code);
               return (
@@ -411,7 +425,19 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
                   )}
                 </div>
               );
-            })
+              })}
+              <div className="pt-1.5">
+                <PaginationBar
+                  page={safePage}
+                  totalPages={totalPages}
+                  totalItems={filteredDiagrams.length}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  darkMode={darkMode}
+                  compact
+                />
+              </div>
+            </>
           )}
         </div>
 
