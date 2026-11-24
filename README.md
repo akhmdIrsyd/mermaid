@@ -29,8 +29,10 @@ Workspace visual & editor **Mermaid.js** modern bergaya **mermaid.ai** dengan se
 - **Kolaborasi & Presentasi**: **Version History + Diff Viewer**, **Comments & Pinned Canvas Annotations**, **Draggable Sticky Notes**, **Diagram Notes (Markdown)**, **Live Share Link (`#pako:...`)**, **Backup/Restore JSON**, dan **Presentation Fullscreen Mode + Laser Pointer**.
 
 ### 3. Pagination & Performa Anti-Lag untuk Data Besar
-- **Server-Side SQL Pagination (`LIMIT/OFFSET`)** + **Index PostgreSQL** pada daftar user dan diagram Super Admin.
+- **Server-Side SQL Pagination (`LIMIT/OFFSET`)** + **Index PostgreSQL** pada daftar user dan diagram Super Admin (CTE pagination sehingga `COUNT` diagram/folder hanya dihitung untuk halaman aktif).
 - **Lightweight List Projection & Lazy Detail Loading**: Daftar diagram Super Admin hanya mengambil metadata + ukuran file (`KB`) tanpa memuat teks `code` besar; kode penuh hanya diambil saat tombol **Buka Salinan** diklik.
+- **Lazy Per-Tab Fetching & Auth Cache**: Tab di Super Admin Console memuat data secara independen per tab (tab *Semua Diagram* hanya di-fetch saat dibuka), didukung cache status auth 10 detik di backend dengan invalidasi instan saat role/status user diubah.
+- **UI Rendering Ringan (60fps)**: Backdrop modal bebas `backdrop-blur` berat di atas SVG + `contain: layout paint`, `React.memo` untuk `CanvasWorkspace` & `CodeEditorPanel`, serta conditional mount modal.
 - **Pagination UI Konsisten (`PaginationBar`)** di seluruh daftar data: Super Admin Users (`10/20/50`), Super Admin Diagrams (`10/20/50`), Sidebar File (`10`/hal), Version History (`8`/hal), Comments (`8`/hal), dan Templates Gallery (`9`/hal).
 
 ---
